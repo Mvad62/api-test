@@ -54,6 +54,19 @@ class ChatSession:
             {"role": "system", "content": "Ты полезный ассистент."}
         ]
 
+    @staticmethod
+    def _read_usage_value(obj: object, *keys: str) -> object:
+        """Безопасно читает вложенные поля из объектной или словарной структуры."""
+        value = obj
+        for key in keys:
+            if value is None:
+                return None
+            if isinstance(value, dict):
+                value = value.get(key)
+            else:
+                value = getattr(value, key, None)
+        return value
+
     def generate_text(self, user_text: str) -> str:
         """Отправляет сообщение с историей диалога и сохраняет ответ в контекст."""
         conversation = [*self.messages, {"role": "user", "content": user_text}]
@@ -64,6 +77,32 @@ class ChatSession:
         answer = response.choices[0].message.content
         if answer is None:
             raise RuntimeError("API вернул ответ без текста.")
+
+        usage = getattr(response, "usage", None)
+        prompt_tokens = self._read_usage_value(usage, "prompt_tokens")
+        completion_tokens = self._read_usage_value(usage, "completion_tokens")
+        total_tokens = self._read_usage_value(usage, "total_tokens")
+        completion_details = self._read_usage_value(usage, "completion_tokens_details")
+        reasoning_tokens = self._read_usage_value(completion_details, "reasoning_tokens")
+        cached_tokens = self._read_usage_value(usage, "prompt_tokens_details", "cached_tokens")
+
+        if usage is not None:
+            print(
+                "[Usage] "
+                f"prompt={prompt_tokens if prompt_tokens is not None else 'n/a'}, "
+                f"completion={completion_tokens if completion_tokens is not None else 'n/a'}, "
+                f"total={total_tokens if total_tokens is not None else 'n/a'}, "
+                + (
+                    f"reasoning={reasoning_tokens}"
+                    if reasoning_tokens is not None
+                    else "reasoning=n/a"
+                )
+                + (
+                    f", cached={cached_tokens}"
+                    if cached_tokens is not None
+                    else ""
+                )
+            )
 
         self.messages = [
             *conversation,
